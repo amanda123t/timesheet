@@ -1,5 +1,5 @@
-import { fetchApi } from "@/lib/api";
 "use client";
+import { fetchApi } from "@/lib/api";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
