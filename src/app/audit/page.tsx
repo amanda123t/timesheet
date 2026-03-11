@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -32,9 +33,7 @@ export default function AuditPage() {
   const { data, isLoading } = useQuery<AuditResponse>({
     queryKey: ["missing-entries", year, month],
     queryFn: () =>
-      fetch(`/api/reports/missing-entries?year=${year}&month=${month}`).then(
-        (r) => r.json()
-      ),
+      fetchApi(`/api/reports/missing-entries?year=${year}&month=${month}`),
   });
 
   const formatDate = (dateStr: string) => {

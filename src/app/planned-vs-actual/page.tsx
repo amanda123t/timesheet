@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -39,12 +40,12 @@ export default function PlannedVsActualPage() {
 
   const { data: profiles = [] } = useQuery<Profile[]>({
     queryKey: ["profiles"],
-    queryFn: () => fetch("/api/profiles").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/profiles"),
   });
 
   const { data: activities = [] } = useQuery<Activity[]>({
     queryKey: ["activities"],
-    queryFn: () => fetch("/api/activities").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/activities"),
   });
 
   const params = new URLSearchParams();
@@ -54,7 +55,7 @@ export default function PlannedVsActualPage() {
   const { data, isLoading } = useQuery<PvAResponse>({
     queryKey: ["planned-vs-actual", activityFilter, profileFilter],
     queryFn: () =>
-      fetch(`/api/reports/planned-vs-actual?${params}`).then((r) => r.json()),
+      fetchApi(`/api/reports/planned-vs-actual?${params}`),
   });
 
   const rows = data?.rows ?? [];

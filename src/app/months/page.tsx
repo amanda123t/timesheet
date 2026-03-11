@@ -1,3 +1,4 @@
+import { fetchApi } from "@/lib/api";
 "use client";
 
 import { useState } from "react";
@@ -19,7 +20,7 @@ export default function MonthsPage() {
 
   const { data: months = [], isLoading } = useQuery<MonthWithCount[]>({
     queryKey: ["months"],
-    queryFn: () => fetch("/api/months").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/months"),
   });
 
   const createMutation = useMutation({

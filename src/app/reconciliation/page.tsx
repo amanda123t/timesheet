@@ -1,3 +1,4 @@
+import { fetchApi } from "@/lib/api";
 "use client";
 
 import { useState } from "react";
@@ -22,7 +23,7 @@ export default function ReconciliationPage() {
 
   const { data: months = [] } = useQuery<Month[]>({
     queryKey: ["months"],
-    queryFn: () => fetch("/api/months").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/months"),
   });
 
   const params = new URLSearchParams();
@@ -32,7 +33,7 @@ export default function ReconciliationPage() {
   const { data: rows = [], isLoading } = useQuery<ReconciliationRow[]>({
     queryKey: ["reconciliation", yearFilter, monthFilter],
     queryFn: () =>
-      fetch(`/api/reports/reconciliation?${params}`).then((r) => r.json()),
+      fetchApi(`/api/reports/reconciliation?${params}`),
   });
 
   const monthLabel = (m: Month) =>

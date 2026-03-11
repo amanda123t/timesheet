@@ -1,3 +1,4 @@
+import { fetchApi } from "@/lib/api";
 "use client";
 
 import { useState } from "react";
@@ -29,13 +30,13 @@ export default function EmployeesPage() {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (profileFilter) params.set("profileId", profileFilter);
-      return fetch(`/api/employees?${params}`).then((r) => r.json());
+      return fetchApi(`/api/employees?${params}`);
     },
   });
 
   const { data: profiles = [] } = useQuery<Profile[]>({
     queryKey: ["profiles"],
-    queryFn: () => fetch("/api/profiles").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/profiles"),
   });
 
   const resetForm = () =>

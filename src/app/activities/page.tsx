@@ -1,3 +1,4 @@
+import { fetchApi } from "@/lib/api";
 "use client";
 
 import { useState } from "react";
@@ -31,13 +32,13 @@ export default function ActivitiesPage() {
     queryFn: () => {
       const params = new URLSearchParams({ withEstimates: "true" });
       if (search) params.set("search", search);
-      return fetch(`/api/activities?${params}`).then((r) => r.json());
+      return fetchApi(`/api/activities?${params}`);
     },
   });
 
   const { data: profiles = [] } = useQuery<Profile[]>({
     queryKey: ["profiles"],
-    queryFn: () => fetch("/api/profiles").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/profiles"),
   });
 
   const openCreate = () => {

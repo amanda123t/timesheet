@@ -1,3 +1,4 @@
+import { fetchApi } from "@/lib/api";
 "use client";
 
 import { useState } from "react";
@@ -32,12 +33,12 @@ export default function TaskMappingsPage() {
 
   const { data: tasks = [], isLoading } = useQuery<TaskWithMapping[]>({
     queryKey: ["tasks", unmappedOnly],
-    queryFn: () => fetch(`/api/tasks?${params}`).then((r) => r.json()),
+    queryFn: () => fetchApi(`/api/tasks?${params}`),
   });
 
   const { data: activities = [] } = useQuery<Activity[]>({
     queryKey: ["activities"],
-    queryFn: () => fetch("/api/activities").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/activities"),
   });
 
   const updateMapping = useMutation({

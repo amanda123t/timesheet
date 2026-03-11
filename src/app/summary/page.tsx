@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
+import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -27,22 +28,22 @@ export default function SummaryPage() {
 
   const { data: employees = [] } = useQuery<Employee[]>({
     queryKey: ["employees"],
-    queryFn: () => fetch("/api/employees").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/employees"),
   });
 
   const { data: profiles = [] } = useQuery<Profile[]>({
     queryKey: ["profiles"],
-    queryFn: () => fetch("/api/profiles").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/profiles"),
   });
 
   const { data: activities = [] } = useQuery<Activity[]>({
     queryKey: ["activities"],
-    queryFn: () => fetch("/api/activities").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/activities"),
   });
 
   const { data: months = [] } = useQuery<Month[]>({
     queryKey: ["months"],
-    queryFn: () => fetch("/api/months").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/months"),
   });
 
   const params = new URLSearchParams();
@@ -54,7 +55,7 @@ export default function SummaryPage() {
   const { data: rows = [], isLoading } = useQuery<SummaryRow[]>({
     queryKey: ["summary", employeeFilter, activityFilter, profileFilter, monthFilter],
     queryFn: () =>
-      fetch(`/api/reports/summary?${params}`).then((r) => r.json()),
+      fetchApi(`/api/reports/summary?${params}`),
   });
 
   const exportToExcel = () => {

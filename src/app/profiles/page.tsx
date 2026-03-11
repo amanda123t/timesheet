@@ -1,3 +1,4 @@
+import { fetchApi } from "@/lib/api";
 "use client";
 
 import { useState } from "react";
@@ -18,12 +19,12 @@ export default function ProfilesPage() {
 
   const { data: profiles = [], isLoading: profLoading } = useQuery<Profile[]>({
     queryKey: ["profiles"],
-    queryFn: () => fetch("/api/profiles").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/profiles"),
   });
 
   const { data: employees = [], isLoading: empLoading } = useQuery<Employee[]>({
     queryKey: ["employees"],
-    queryFn: () => fetch("/api/employees").then((r) => r.json()),
+    queryFn: () => fetchApi("/api/employees"),
   });
 
   const createProfile = useMutation({
