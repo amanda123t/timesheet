@@ -1,0 +1,168 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── PROFILES ─────────────────────────────────────────────────────────────────
+// Representam os papéis da equipe (ex: Analista de Processos, Dev RPA, etc.)
+model Profile {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  employees         Employee[]
+  activityEstimates ActivityEstimate[]
+
+  @@map("profiles")
+}
+
+// ─── EMPLOYEES ────────────────────────────────────────────────────────────────
+// Funcionários importados via func.csv
+model Employee {
+  id        Int      @id @default(autoincrement())
+  name      String
+  role      String?  // cargo
+  profileId Int?     @map("profile_id")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  profile     Profile?    @relation(fields: [profileId], references: [id])
+  timeEntries TimeEntry[]
+
+  @@index([name])
+  @@index([profileId])
+  @@map("employees")
+}
+
+// ─── ACTIVITIES ───────────────────────────────────────────────────────────────
+// Atividades/processos/iniciativas que representam projetos ou entregas
+model Activity {
+  id          Int      @id @default(autoincrement())
+  code        String?  // código do projeto (ex: 23616)
+  name        String   // nome completo (ex: CR Resc. Mensal R04 Generate FGTS)
+  description String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  estimates    ActivityEstimate[]
+  taskMappings TaskMapping[]
+  timeEntries  TimeEntry[]
+
+  @@index([name])
+  @@map("activities")
+}
+
+// ─── ACTIVITY ESTIMATES ───────────────────────────────────────────────────────
+// Horas planejadas por atividade e perfil (assessment + arquitetura)
+model ActivityEstimate {
+  id                Int     @id @default(autoincrement())
+  activityId        Int     @map("activity_id")
+  profileId         Int     @map("profile_id")
+  assessmentHours   Decimal @default(0) @map("assessment_hours") @db.Decimal(10, 2)
+  architectureHours Decimal @default(0) @map("architecture_hours") @db.Decimal(10, 2)
+
+  activity Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  profile  Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, profileId])
+  @@index([activityId])
+  @@index([profileId])
+  @@map("activity_estimates")
+}
+
+// ─── TASKS ────────────────────────────────────────────────────────────────────
+// Tarefas brutas importadas da base de horas (nomes originais, sem normalização)
+model Task {
+  id      Int    @id @default(autoincrement())
+  rawName String @unique @map("raw_name")
+
+  mapping     TaskMapping?
+  timeEntries TimeEntry[]
+
+  @@index([rawName])
+  @@map("tasks")
+}
+
+// ─── TASK MAPPINGS (DE/PARA) ──────────────────────────────────────────────────
+// Mapeia tarefa bruta para atividade padronizada
+model TaskMapping {
+  id         Int  @id @default(autoincrement())
+  taskId     Int  @unique @map("task_id")
+  activityId Int? @map("activity_id")
+
+  task     Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  activity Activity? @relation(fields: [activityId], references: [id], onDelete: SetNull)
+
+  @@index([taskId])
+  @@index([activityId])
+  @@map("task_mappings")
+}
+
+// ─── MONTHS ───────────────────────────────────────────────────────────────────
+// Gestão do ciclo de meses (aberto/fechado)
+model Month {
+  id        Int       @id @default(autoincrement())
+  year      Int
+  month     Int       // 1-12
+  status    String    @default("open") // "open" | "closed"
+  closedAt  DateTime? @map("closed_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  timeEntries TimeEntry[]
+
+  @@unique([year, month])
+  @@index([year, month])
+  @@map("months")
+}
+
+// ─── TIME ENTRIES ─────────────────────────────────────────────────────────────
+// Horas apontadas - coração do sistema. Importado de base.csv ou xlsx
+model TimeEntry {
+  id              Int      @id @default(autoincrement())
+  employeeId      Int?     @map("employee_id")    // resolvido após importação
+  taskId          Int?     @map("task_id")         // tarefa bruta
+  activityId      Int?     @map("activity_id")     // desnormalizado para performance
+  monthId         Int?     @map("month_id")
+  entryDate       DateTime @map("entry_date") @db.Date
+  hours           Decimal  @db.Decimal(10, 2)
+  rawEmployeeName String   @map("raw_employee_name") // nome original para conciliação
+  rawTaskName     String   @map("raw_task_name")     // tarefa original
+  rawProject      String?  @map("raw_project")       // projeto original
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  employee Employee? @relation(fields: [employeeId], references: [id])
+  task     Task?     @relation(fields: [taskId], references: [id])
+  activity Activity? @relation(fields: [activityId], references: [id])
+  month    Month?    @relation(fields: [monthId], references: [id])
+
+  @@index([employeeId])
+  @@index([activityId])
+  @@index([monthId])
+  @@index([entryDate])
+  @@index([rawEmployeeName])
+  @@map("time_entries")
+}
+
+// ─── AUDIT LOGS ───────────────────────────────────────────────────────────────
+// Log de todas as operações importantes do sistema
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  action    String   // ex: "IMPORT_EMPLOYEES", "IMPORT_HOURS", "CLOSE_MONTH", "RESET"
+  entity    String?  // ex: "employees", "time_entries"
+  entityId  Int?     @map("entity_id")
+  details   Json?    // informações extras em JSON
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
