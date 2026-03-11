@@ -31,12 +31,13 @@ export async function GET(req: NextRequest) {
     // Get distinct employee names from time entries with their hours per month
     const entries = await prisma.timeEntry.findMany({
       where: { ...monthFilter },
-      include: { month: true },
       select: {
         rawEmployeeName: true,
         employeeId: true,
         hours: true,
-        month: true,
+        month: {
+          select: { year: true, month: true },
+        },
       },
     });
 
