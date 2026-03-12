@@ -13,6 +13,7 @@ import {
   LineChart,
   Link2,
   Calendar,
+  CalendarDays,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { href: "/planned-vs-actual", label: "Planejamento vs Realizado", icon: LineChart,      number: 7 },
   { href: "/reconciliation",    label: "Conciliação",               icon: Link2,          number: 8 },
   { href: "/months",            label: "Gestão de Meses",           icon: Calendar,       number: 9 },
+  { href: "/daily-entries",    label: "Apontamento Diário",         icon: CalendarDays,   number: 10 },
 ];
 
 export function Sidebar() {
