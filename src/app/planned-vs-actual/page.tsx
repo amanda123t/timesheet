@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Download } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Profile, Activity } from "@/types";
+import * as XLSX from "xlsx";
 
 interface MonthCol {
   key: string;
@@ -76,6 +78,77 @@ export default function PlannedVsActualPage() {
   const totalActual = rows.reduce((s, r) => s + r.totalActual, 0);
   const totalVariance = totalActual - totalPlanned;
 
+  function exportExcel() {
+    const headers = [
+      "Código",
+      "Processo / Atividade",
+      "Perfil",
+      "Assessment (h)",
+      "Arquitetura (h)",
+      "Total Planejado (h)",
+      ...months.map((m) => m.label),
+      "Total Realizado (h)",
+      "Variação (h)",
+      "%",
+    ];
+
+    const dataRows = rows.map((row) => {
+      const pct =
+        row.totalPlanned > 0
+          ? Math.round((row.totalActual / row.totalPlanned) * 100)
+          : row.totalActual > 0
+          ? 999
+          : 0;
+
+      return [
+        row.activityCode ?? "",
+        row.activityName,
+        row.profileName,
+        row.assessmentHours,
+        row.architectureHours,
+        row.totalPlanned,
+        ...months.map((m) => row.actualByMonth[m.key] ?? 0),
+        row.totalActual,
+        row.variance,
+        pct === 999 ? "∞%" : `${pct}%`,
+      ];
+    });
+
+    // Totals row
+    dataRows.push([
+      "",
+      "TOTAIS",
+      "",
+      rows.reduce((s, r) => s + r.assessmentHours, 0),
+      rows.reduce((s, r) => s + r.architectureHours, 0),
+      totalPlanned,
+      ...months.map((m) => rows.reduce((s, r) => s + (r.actualByMonth[m.key] ?? 0), 0)),
+      totalActual,
+      totalVariance,
+      "",
+    ]);
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+
+    // Column widths
+    ws["!cols"] = [
+      { wch: 12 },
+      { wch: 40 },
+      { wch: 20 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 18 },
+      ...months.map(() => ({ wch: 12 })),
+      { wch: 18 },
+      { wch: 14 },
+      { wch: 8 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Planejamento vs Realizado");
+    XLSX.writeFile(wb, "planejamento_vs_realizado.xlsx");
+  }
+
   return (
     <div>
       <PageHeader
@@ -84,7 +157,7 @@ export default function PlannedVsActualPage() {
       />
 
       {/* Filters */}
-      <div className="flex gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3 mb-6">
         <select
           className="form-select"
           value={activityFilter}
@@ -109,6 +182,15 @@ export default function PlannedVsActualPage() {
             </option>
           ))}
         </select>
+
+        <button
+          onClick={exportExcel}
+          disabled={rows.length === 0}
+          className="btn btn-secondary ml-auto flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Download size={15} />
+          Exportar Excel
+        </button>
       </div>
 
       {/* Summary Stats */}
