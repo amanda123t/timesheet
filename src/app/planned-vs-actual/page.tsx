@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download } from "lucide-react";
+import { Download, ChevronDown } from "lucide-react";
 import { fetchApi } from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -39,6 +39,9 @@ interface PvAResponse {
 export default function PlannedVsActualPage() {
   const [activityFilter, setActivityFilter] = useState("");
   const [profileFilter, setProfileFilter] = useState("");
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exportingAll, setExportingAll] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
 
   const { data: profiles = [] } = useQuery<Profile[]>({
     queryKey: ["profiles"],
@@ -78,7 +81,26 @@ export default function PlannedVsActualPage() {
   const totalActual = rows.reduce((s, r) => s + r.totalActual, 0);
   const totalVariance = totalActual - totalPlanned;
 
-  function exportExcel() {
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function buildAndDownloadExcel(
+    exportRows: PvARow[],
+    exportMonths: MonthCol[],
+    filename: string
+  ) {
+    const tPlanned = exportRows.reduce((s, r) => s + r.totalPlanned, 0);
+    const tActual = exportRows.reduce((s, r) => s + r.totalActual, 0);
+    const tVariance = tActual - tPlanned;
+
     const headers = [
       "Código",
       "Processo / Atividade",
@@ -86,20 +108,19 @@ export default function PlannedVsActualPage() {
       "Assessment (h)",
       "Arquitetura (h)",
       "Total Planejado (h)",
-      ...months.map((m) => m.label),
+      ...exportMonths.map((m) => m.label),
       "Total Realizado (h)",
       "Variação (h)",
       "%",
     ];
 
-    const dataRows = rows.map((row) => {
+    const dataRows = exportRows.map((row) => {
       const pct =
         row.totalPlanned > 0
           ? Math.round((row.totalActual / row.totalPlanned) * 100)
           : row.totalActual > 0
           ? 999
           : 0;
-
       return [
         row.activityCode ?? "",
         row.activityName,
@@ -107,30 +128,29 @@ export default function PlannedVsActualPage() {
         row.assessmentHours,
         row.architectureHours,
         row.totalPlanned,
-        ...months.map((m) => row.actualByMonth[m.key] ?? 0),
+        ...exportMonths.map((m) => row.actualByMonth[m.key] ?? 0),
         row.totalActual,
         row.variance,
         pct === 999 ? "∞%" : `${pct}%`,
       ];
     });
 
-    // Totals row
     dataRows.push([
       "",
       "TOTAIS",
       "",
-      rows.reduce((s, r) => s + r.assessmentHours, 0),
-      rows.reduce((s, r) => s + r.architectureHours, 0),
-      totalPlanned,
-      ...months.map((m) => rows.reduce((s, r) => s + (r.actualByMonth[m.key] ?? 0), 0)),
-      totalActual,
-      totalVariance,
+      exportRows.reduce((s, r) => s + r.assessmentHours, 0),
+      exportRows.reduce((s, r) => s + r.architectureHours, 0),
+      tPlanned,
+      ...exportMonths.map((m) =>
+        exportRows.reduce((s, r) => s + (r.actualByMonth[m.key] ?? 0), 0)
+      ),
+      tActual,
+      tVariance,
       "",
     ]);
 
     const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-
-    // Column widths
     ws["!cols"] = [
       { wch: 12 },
       { wch: 40 },
@@ -138,7 +158,7 @@ export default function PlannedVsActualPage() {
       { wch: 16 },
       { wch: 16 },
       { wch: 18 },
-      ...months.map(() => ({ wch: 12 })),
+      ...exportMonths.map(() => ({ wch: 12 })),
       { wch: 18 },
       { wch: 14 },
       { wch: 8 },
@@ -146,7 +166,23 @@ export default function PlannedVsActualPage() {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Planejamento vs Realizado");
-    XLSX.writeFile(wb, "planejamento_vs_realizado.xlsx");
+    XLSX.writeFile(wb, filename);
+  }
+
+  function exportSelection() {
+    setExportMenuOpen(false);
+    buildAndDownloadExcel(rows, months, "planejamento_vs_realizado_selecao.xlsx");
+  }
+
+  async function exportAll() {
+    setExportMenuOpen(false);
+    setExportingAll(true);
+    try {
+      const all: PvAResponse = await fetchApi("/api/reports/planned-vs-actual");
+      buildAndDownloadExcel(all.rows, all.months, "planejamento_vs_realizado_completo.xlsx");
+    } finally {
+      setExportingAll(false);
+    }
   }
 
   return (
@@ -183,14 +219,48 @@ export default function PlannedVsActualPage() {
           ))}
         </select>
 
-        <button
-          onClick={exportExcel}
-          disabled={rows.length === 0}
-          className="btn btn-secondary ml-auto flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-        >
-          <Download size={15} />
-          Exportar Excel
-        </button>
+        {/* Export split-button */}
+        <div className="relative ml-auto" ref={exportMenuRef}>
+          <div className="flex">
+            <button
+              onClick={exportSelection}
+              disabled={rows.length === 0}
+              className="btn btn-secondary flex items-center gap-2 rounded-r-none border-r-0 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Download size={15} />
+              Exportar Seleção
+            </button>
+            <button
+              onClick={() => setExportMenuOpen((o) => !o)}
+              disabled={exportingAll}
+              className="btn btn-secondary rounded-l-none px-2 border-l border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed"
+              aria-label="Mais opções de exportação"
+            >
+              <ChevronDown size={14} className={`transition-transform ${exportMenuOpen ? "rotate-180" : ""}`} />
+            </button>
+          </div>
+
+          {exportMenuOpen && (
+            <div className="absolute right-0 mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
+              <button
+                onClick={exportSelection}
+                disabled={rows.length === 0}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Download size={13} />
+                Exportar Seleção
+              </button>
+              <button
+                onClick={exportAll}
+                disabled={exportingAll}
+                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+              >
+                <Download size={13} />
+                {exportingAll ? "Exportando..." : "Exportar Tudo"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Summary Stats */}
