@@ -2,51 +2,22 @@
 
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import toast from "react-hot-toast";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Modal } from "@/components/ui/Modal";
-import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { fetchApi, mutateApi } from "@/lib/api";
+import {
+  TimesheetCalendar,
+  CalendarCell,
+  toHHMM,
+  MONTH_NAMES,
+} from "@/components/timesheet-calendar";
+import {
+  TimesheetEntryModal,
+  EntryForm,
+  parseHHMM,
+} from "@/components/timesheet-entry-modal";
 import type { Employee, Activity, TimeEntry } from "@/types";
-
-const MONTH_NAMES = [
-  "Janeiro",
-  "Fevereiro",
-  "Marco",
-  "Abril",
-  "Maio",
-  "Junho",
-  "Julho",
-  "Agosto",
-  "Setembro",
-  "Outubro",
-  "Novembro",
-  "Dezembro",
-];
-
-const DAY_HEADERS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
-
-function parseHHMM(value: string): number | null {
-  const match = value.match(/^(\d{1,3}):(\d{2})$/);
-  if (!match) return null;
-  const h = parseInt(match[1], 10);
-  const m = parseInt(match[2], 10);
-  if (m >= 60) return null;
-  return h + m / 60;
-}
-
-function formatHours(totalHours: number): string {
-  const h = Math.floor(totalHours);
-  const m = Math.round((totalHours - h) * 60);
-  if (m === 0) return `${h}h`;
-  return `${h}h ${m}m`;
-}
-
-interface CalendarCell {
-  day: number | null;
-  hours: number;
-}
 
 export default function DailyEntriesPage() {
   const today = new Date();
@@ -55,7 +26,7 @@ export default function DailyEntriesPage() {
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
-  const [form, setForm] = useState({ activityId: "", hours: "" });
+  const [form, setForm] = useState<EntryForm>({ activityId: "", hours: "" });
 
   const qc = useQueryClient();
 
@@ -89,7 +60,7 @@ export default function DailyEntriesPage() {
       qc.invalidateQueries({ queryKey: ["daily-entries"] });
       setModalOpen(false);
       setForm({ activityId: "", hours: "" });
-      toast.success("Lancamento salvo com sucesso.");
+      toast.success("Lançamento salvo com sucesso.");
     },
     onError: (err) => toast.error(String(err)),
   });
@@ -160,13 +131,13 @@ export default function DailyEntriesPage() {
 
   function handleSave() {
     if (!employeeId || !form.activityId || !form.hours || !selectedDay) {
-      toast.error("Preencha todos os campos obrigatorios.");
+      toast.error("Preencha todos os campos obrigatórios.");
       return;
     }
 
     const hours = parseHHMM(form.hours);
-    if (hours === null || hours <= 0) {
-      toast.error("Informe as horas no formato HH:MM (ex: 08:00).");
+    if (hours === null) {
+      toast.error("Informe as horas no formato HH:MM válido (ex: 08:00).");
       return;
     }
 
@@ -197,11 +168,11 @@ export default function DailyEntriesPage() {
   return (
     <div className="p-6 space-y-6">
       <PageHeader
-        title="Apontamento Diario"
-        description="Registro de horas por colaborador em formato de calendario mensal"
+        title="Apontamento Diário"
+        description="Registro de horas por colaborador em formato de calendário mensal"
       />
 
-      {/* Filters + Navigation */}
+      {/* Filters + Month navigation */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <label className="text-sm font-medium text-gray-700 whitespace-nowrap">
@@ -227,7 +198,7 @@ export default function DailyEntriesPage() {
           <button
             onClick={prevMonth}
             className="p-2 rounded-md border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-            aria-label="Mes anterior"
+            aria-label="Mês anterior"
           >
             <ChevronLeft size={16} className="text-gray-600" />
           </button>
@@ -259,7 +230,7 @@ export default function DailyEntriesPage() {
           <button
             onClick={nextMonth}
             className="p-2 rounded-md border border-gray-200 bg-white hover:bg-gray-50 transition-colors"
-            aria-label="Proximo mes"
+            aria-label="Próximo mês"
           >
             <ChevronRight size={16} className="text-gray-600" />
           </button>
@@ -270,17 +241,17 @@ export default function DailyEntriesPage() {
       {employeeId && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="stat-card">
-            <p className="stat-label">Total de Horas no Mes</p>
-            <p className="stat-value text-primary-700">
-              {formatHours(totalMonthHours)}
+            <p className="stat-label">Total de Horas no Mês</p>
+            <p className="stat-value text-primary-700 tabular-nums">
+              {toHHMM(totalMonthHours)}
             </p>
           </div>
           <div className="stat-card">
-            <p className="stat-label">Lancamentos no Mes</p>
+            <p className="stat-label">Lançamentos no Mês</p>
             <p className="stat-value">{entries.length}</p>
           </div>
           <div className="stat-card">
-            <p className="stat-label">Mes de Referencia</p>
+            <p className="stat-label">Mês de Referência</p>
             <p className="stat-value text-lg">
               {MONTH_NAMES[month - 1]} {year}
             </p>
@@ -289,154 +260,26 @@ export default function DailyEntriesPage() {
       )}
 
       {/* Calendar */}
-      <div className="card">
-        <div className="card-header">
-          <h2 className="text-base font-semibold text-gray-800">
-            {MONTH_NAMES[month - 1]} {year}
-          </h2>
-          {employeeId && (
-            <span className="text-sm text-gray-500">
-              Clique em um dia para adicionar lancamento
-            </span>
-          )}
-        </div>
+      <TimesheetCalendar
+        cells={cells}
+        isLoading={isLoading}
+        employeeId={employeeId}
+        year={year}
+        month={month}
+        onDayClick={openModal}
+      />
 
-        <div className="card-body">
-          {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 mb-1">
-            {DAY_HEADERS.map((d) => (
-              <div
-                key={d}
-                className="text-center text-xs font-semibold text-gray-400 uppercase py-2 tracking-wide"
-              >
-                {d}
-              </div>
-            ))}
-          </div>
-
-          {/* Grid body */}
-          {!employeeId ? (
-            <div className="py-20 text-center">
-              <p className="text-sm text-gray-400">
-                Selecione um colaborador para visualizar o calendario.
-              </p>
-            </div>
-          ) : isLoading ? (
-            <div className="py-20 flex justify-center">
-              <LoadingSpinner />
-            </div>
-          ) : (
-            <div className="grid grid-cols-7 gap-1.5">
-              {cells.map((cell, idx) => {
-                if (!cell.day) {
-                  return <div key={idx} className="aspect-[4/3]" />;
-                }
-
-                const isToday =
-                  cell.day === today.getDate() &&
-                  month === today.getMonth() + 1 &&
-                  year === today.getFullYear();
-
-                return (
-                  <button
-                    key={idx}
-                    onClick={() => openModal(cell.day!)}
-                    className={`
-                      aspect-[4/3] rounded-lg border flex flex-col items-center justify-center gap-1
-                      transition-all duration-150 group relative
-                      ${
-                        isToday
-                          ? "border-primary-400 bg-primary-50 shadow-sm"
-                          : "border-gray-200 bg-white hover:border-primary-300 hover:bg-primary-50 hover:shadow-sm"
-                      }
-                    `}
-                  >
-                    <span
-                      className={`text-sm font-semibold leading-none ${
-                        isToday ? "text-primary-700" : "text-gray-700"
-                      }`}
-                    >
-                      {cell.day}
-                    </span>
-
-                    {cell.hours > 0 ? (
-                      <span className="text-xs font-medium text-primary-600 bg-primary-100 px-1.5 py-0.5 rounded-full leading-none">
-                        {formatHours(cell.hours)}
-                      </span>
-                    ) : (
-                      <Plus
-                        size={12}
-                        className="text-gray-300 group-hover:text-primary-400 transition-colors"
-                      />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Modal */}
-      <Modal
+      {/* Entry modal */}
+      <TimesheetEntryModal
         isOpen={modalOpen}
         onClose={closeModal}
-        title={`Adicionar Lancamento para ${selectedDateLabel}`}
-        size="sm"
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="form-label">Atividade *</label>
-            <select
-              className="form-select w-full"
-              value={form.activityId}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, activityId: e.target.value }))
-              }
-            >
-              <option value="">Selecione uma atividade...</option>
-              {activeActivities.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.code ? `[${a.code}] ` : ""}
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="form-label">Horas *</label>
-            <input
-              type="text"
-              className="form-input w-full"
-              placeholder="HH:MM — ex: 08:00"
-              value={form.hours}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, hours: e.target.value }))
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleSave();
-              }}
-            />
-            <p className="mt-1 text-xs text-gray-400">
-              Use o formato HH:MM. Exemplo: 01:30 para 1 hora e 30 minutos.
-            </p>
-          </div>
-
-          <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
-            <button onClick={closeModal} className="btn btn-secondary">
-              Cancelar
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={createMutation.isPending}
-              className="btn btn-primary"
-            >
-              {createMutation.isPending ? "Salvando..." : "Salvar"}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        dateLabel={selectedDateLabel}
+        activities={activeActivities}
+        form={form}
+        onChange={setForm}
+        onSave={handleSave}
+        isPending={createMutation.isPending}
+      />
     </div>
   );
 }
