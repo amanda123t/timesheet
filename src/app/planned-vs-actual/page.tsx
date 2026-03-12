@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, ChevronDown } from "lucide-react";
 import { fetchApi } from "@/lib/api";
@@ -36,12 +36,18 @@ interface PvAResponse {
   months: MonthCol[];
 }
 
+function rowKey(row: PvARow) {
+  return `${row.activityId}-${row.profileId}`;
+}
+
 export default function PlannedVsActualPage() {
   const [activityFilter, setActivityFilter] = useState("");
   const [profileFilter, setProfileFilter] = useState("");
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [exportingAll, setExportingAll] = useState(false);
   const exportMenuRef = useRef<HTMLDivElement>(null);
+  const selectAllRef = useRef<HTMLInputElement>(null);
 
   const { data: profiles = [] } = useQuery<Profile[]>({
     queryKey: ["profiles"],
@@ -59,12 +65,50 @@ export default function PlannedVsActualPage() {
 
   const { data, isLoading } = useQuery<PvAResponse>({
     queryKey: ["planned-vs-actual", activityFilter, profileFilter],
-    queryFn: () =>
-      fetchApi(`/api/reports/planned-vs-actual?${params}`),
+    queryFn: () => fetchApi(`/api/reports/planned-vs-actual?${params}`),
   });
 
   const rows = data?.rows ?? [];
   const months = data?.months ?? [];
+
+  // Reset selection when filters or data change
+  useEffect(() => {
+    setSelectedKeys(new Set());
+  }, [activityFilter, profileFilter, data]);
+
+  // Update indeterminate state on select-all checkbox
+  useEffect(() => {
+    if (!selectAllRef.current || rows.length === 0) return;
+    const count = selectedKeys.size;
+    selectAllRef.current.indeterminate = count > 0 && count < rows.length;
+  }, [selectedKeys, rows.length]);
+
+  // Close export dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setExportMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleRow = useCallback((key: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(() => {
+    setSelectedKeys((prev) =>
+      prev.size === rows.length
+        ? new Set()
+        : new Set(rows.map(rowKey))
+    );
+  }, [rows]);
 
   const varianceColor = (v: number) => {
     if (Math.abs(v) < 0.1) return "text-gray-700";
@@ -76,21 +120,10 @@ export default function PlannedVsActualPage() {
     return v > 0 ? "bg-red-50" : "bg-green-50";
   };
 
-  // Summary stats
+  // Summary stats (based on visible rows)
   const totalPlanned = rows.reduce((s, r) => s + r.totalPlanned, 0);
   const totalActual = rows.reduce((s, r) => s + r.totalActual, 0);
   const totalVariance = totalActual - totalPlanned;
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
-        setExportMenuOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   function buildAndDownloadExcel(
     exportRows: PvARow[],
@@ -171,7 +204,8 @@ export default function PlannedVsActualPage() {
 
   function exportSelection() {
     setExportMenuOpen(false);
-    buildAndDownloadExcel(rows, months, "planejamento_vs_realizado_selecao.xlsx");
+    const selected = rows.filter((r) => selectedKeys.has(rowKey(r)));
+    buildAndDownloadExcel(selected, months, "planejamento_vs_realizado_selecao.xlsx");
   }
 
   async function exportAll() {
@@ -184,6 +218,8 @@ export default function PlannedVsActualPage() {
       setExportingAll(false);
     }
   }
+
+  const allSelected = rows.length > 0 && selectedKeys.size === rows.length;
 
   return (
     <div>
@@ -224,11 +260,17 @@ export default function PlannedVsActualPage() {
           <div className="flex">
             <button
               onClick={exportSelection}
-              disabled={rows.length === 0}
+              disabled={selectedKeys.size === 0}
               className="btn btn-secondary flex items-center gap-2 rounded-r-none border-r-0 disabled:opacity-40 disabled:cursor-not-allowed"
+              title={selectedKeys.size === 0 ? "Selecione ao menos uma linha" : `Exportar ${selectedKeys.size} linha(s) selecionada(s)`}
             >
               <Download size={15} />
               Exportar Seleção
+              {selectedKeys.size > 0 && (
+                <span className="bg-primary-600 text-white text-xs rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center leading-none">
+                  {selectedKeys.size}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setExportMenuOpen((o) => !o)}
@@ -241,14 +283,17 @@ export default function PlannedVsActualPage() {
           </div>
 
           {exportMenuOpen && (
-            <div className="absolute right-0 mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
+            <div className="absolute right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-20 py-1">
               <button
                 onClick={exportSelection}
-                disabled={rows.length === 0}
+                disabled={selectedKeys.size === 0}
                 className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 <Download size={13} />
                 Exportar Seleção
+                {selectedKeys.size > 0 && (
+                  <span className="ml-auto text-xs text-gray-400">{selectedKeys.size} linha(s)</span>
+                )}
               </button>
               <button
                 onClick={exportAll}
@@ -307,7 +352,17 @@ export default function PlannedVsActualPage() {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th className="sticky left-0 bg-gray-50 z-10">Processo / Atividade</th>
+                  <th className="sticky left-0 bg-gray-50 z-10 w-8 px-3">
+                    <input
+                      ref={selectAllRef}
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      className="rounded border-gray-300 text-primary-600 cursor-pointer"
+                      title={allSelected ? "Desmarcar todas" : "Selecionar todas"}
+                    />
+                  </th>
+                  <th className="sticky left-8 bg-gray-50 z-10">Processo / Atividade</th>
                   <th>Perfil</th>
                   <th className="text-right bg-blue-50">Assessment (h)</th>
                   <th className="text-right bg-blue-50">Arquitetura (h)</th>
@@ -324,6 +379,8 @@ export default function PlannedVsActualPage() {
               </thead>
               <tbody>
                 {rows.map((row, i) => {
+                  const key = rowKey(row);
+                  const isSelected = selectedKeys.has(key);
                   const pct =
                     row.totalPlanned > 0
                       ? Math.round((row.totalActual / row.totalPlanned) * 100)
@@ -332,8 +389,19 @@ export default function PlannedVsActualPage() {
                       : 0;
 
                   return (
-                    <tr key={i} className={varianceBg(row.variance)}>
-                      <td className="sticky left-0 bg-white max-w-xs">
+                    <tr
+                      key={i}
+                      className={`${varianceBg(row.variance)} ${isSelected ? "ring-1 ring-inset ring-primary-300 bg-primary-50/40" : ""}`}
+                    >
+                      <td className="sticky left-0 z-10 px-3 bg-inherit">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleRow(key)}
+                          className="rounded border-gray-300 text-primary-600 cursor-pointer"
+                        />
+                      </td>
+                      <td className="sticky left-8 bg-white max-w-xs">
                         <div className="flex flex-col">
                           {row.activityCode && (
                             <span className="text-xs text-gray-400 font-mono">
@@ -391,7 +459,8 @@ export default function PlannedVsActualPage() {
               {rows.length > 0 && (
                 <tfoot>
                   <tr className="bg-gray-100 border-t-2 border-gray-300 font-bold">
-                    <td colSpan={2} className="px-4 py-3 sticky left-0 bg-gray-100">
+                    <td className="sticky left-0 bg-gray-100" />
+                    <td colSpan={2} className="px-4 py-3 sticky left-8 bg-gray-100">
                       TOTAIS
                     </td>
                     <td className="px-4 py-3 text-right text-blue-700 bg-blue-50">
@@ -413,9 +482,7 @@ export default function PlannedVsActualPage() {
                     <td className="px-4 py-3 text-right text-primary-700 bg-primary-50">
                       {totalActual.toFixed(1)}h
                     </td>
-                    <td
-                      className={`px-4 py-3 text-right ${varianceColor(totalVariance)}`}
-                    >
+                    <td className={`px-4 py-3 text-right ${varianceColor(totalVariance)}`}>
                       {totalVariance > 0 ? "+" : ""}
                       {totalVariance.toFixed(1)}h
                     </td>
