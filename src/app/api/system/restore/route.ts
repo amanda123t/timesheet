@@ -10,16 +10,15 @@ export async function POST(req: NextRequest) {
     }
 
     const text = await file.text();
-    const backup = JSON.parse(text);
-
-    if (!backup.version || !backup.data) {
-      return NextResponse.json(
-        { error: "Invalid backup file format" },
-        { status: 400 }
-      );
+    let backup: Record<string, unknown>;
+    try {
+      backup = JSON.parse(text);
+    } catch {
+      return NextResponse.json({ error: "Arquivo JSON inválido ou corrompido" }, { status: 400 });
     }
 
-    const { data } = backup;
+    // Support both { version, data } and flat structure
+    const data = (backup.data as Record<string, unknown>) ?? backup;
 
     // Clear existing data
     await prisma.timeEntry.deleteMany({});
